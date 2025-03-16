@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Shadow Flappy</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Press Start 2P', cursive;
+            background: #000;
+        }
+        #gameCanvas {
+            display: block;
+            margin: auto;
+            /* Убираем фоновое изображение, фон будет рисоваться через canvas */
+            border: 2px solid black;
+        }
+        #menu {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        #menu h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        #menu button {
+            padding: 15px 30px;
+            font-size: 20px;
+            background: #e74c3c;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            color: white;
+        }
+        #score {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 24px;
+            z-index: 5;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+    <div id="menu">
+        <h1>SHADOW</h1>
+        <button id="startBtn">Start Game</button>
+    </div>
+    <div id="score"></div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const menu = document.getElementById('menu');
+        const startBtn = document.getElementById('startBtn');
+        const scoreElement = document.getElementById('score');
+        
+        let gameStarted = false;
+        let score = 0;
+        let bgTime = 0; // переменная для анимации фона
+        
+        // Параметры персонажа
+        const shadow = {
+            x: 50,
+            y: 300,
+            width: 40,
+            height: 40,
+            velocity: 0,
+            gravity: 0.5,
+            jump: -8
+        };
+        
+        // Параметры труб
+        let pipes = [];
+        const pipeWidth = 50;
+        const pipeGap = 150;
+        const pipeSpacing = 200;
+        const pipeSpeed = 3; // скорость труб
+        
+        // Загрузка изображения персонажа
+        const shadowImg = new Image();
+        shadowImg.src = 'https://i0.wp.com/mynintendonews.com/wp-content/uploads/2024/04/shadow_year_of_shadow.webp?fit=2560%2C2291&ssl=1';
+        
+        // Управление
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && gameStarted) {
+                shadow.velocity = shadow.jump;
+            }
+        });
+        canvas.addEventListener('click', () => {
+            if (gameStarted) {
+                shadow.velocity = shadow.jump;
+            }
+        });
+        startBtn.addEventListener('click', startGame);
+        
+        function startGame() {
+            gameStarted = true;
+            score = 0;
+            pipes = [];
+            shadow.y = 300;
+            shadow.velocity = 0;
+            menu.style.display = 'none';
+            gameLoop();
+        }
+        
+        function createPipe() {
+            const gapPosition = Math.random() * (canvas.height - pipeGap - 100) + 50;
+            pipes.push({
+                x: canvas.width,
+                topHeight: gapPosition,
+                bottomY: gapPosition + pipeGap,
+                passed: false
+            });
+        }
+        
+        function checkCollision(pipe) {
+            return (
+                shadow.x < pipe.x + pipeWidth &&
+                shadow.x + shadow.width > pipe.x &&
+                (shadow.y < pipe.topHeight || shadow.y + shadow.height > pipe.bottomY)
+            );
+        }
+        
+        // Функция для отрисовки трубы с градиентной заливкой и неоновым свечением
+        function drawPipe(pipe) {
+            ctx.save();
+            // Неоновое свечение для колонн
+            ctx.shadowColor = "#0ff";
+            ctx.shadowBlur = 20;
+            
+            // Создаём линейный градиент для трубы
+            let grad = ctx.createLinearGradient(pipe.x, 0, pipe.x, canvas.height);
+            grad.addColorStop(0, "#004");
+            grad.addColorStop(1, "#00aaff");
+            ctx.fillStyle = grad;
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = 2;
+            
+            // Верхняя труба с закруглением снизу
+            ctx.beginPath();
+            ctx.moveTo(pipe.x, 0);
+            ctx.lineTo(pipe.x + pipeWidth, 0);
+            ctx.lineTo(pipe.x + pipeWidth, pipe.topHeight - 20);
+            ctx.quadraticCurveTo(pipe.x + pipeWidth, pipe.topHeight, pipe.x + pipeWidth - 20, pipe.topHeight);
+            ctx.lineTo(pipe.x + 20, pipe.topHeight);
+            ctx.quadraticCurveTo(pipe.x, pipe.topHeight, pipe.x, pipe.topHeight - 20);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            
+            // Нижняя труба с закруглением сверху
+            ctx.beginPath();
+            ctx.moveTo(pipe.x, canvas.height);
+            ctx.lineTo(pipe.x + pipeWidth, canvas.height);
+            ctx.lineTo(pipe.x + pipeWidth, pipe.bottomY + 20);
+            ctx.quadraticCurveTo(pipe.x + pipeWidth, pipe.bottomY, pipe.x + pipeWidth - 20, pipe.bottomY);
+            ctx.lineTo(pipe.x + 20, pipe.bottomY);
+            ctx.quadraticCurveTo(pipe.x, pipe.bottomY, pipe.x, pipe.bottomY + 20);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+        
+        // Функция для отрисовки анимированного тёмного фона с меняющимся градиентом
+        function drawAnimatedBackground() {
+            bgTime += 0.005;
+            // Вычисляем смещение для градиента
+            const x0 = Math.sin(bgTime) * 100;
+            const y0 = Math.cos(bgTime) * 100;
+            
+            let bgGrad = ctx.createLinearGradient(x0, y0, canvas.width - x0, canvas.height - y0);
+            bgGrad.addColorStop(0, "#0d0d0d");
+            bgGrad.addColorStop(0.5, "#1a1a1a");
+            bgGrad.addColorStop(1, "#0d0d0d");
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        function gameLoop() {
+            if (!gameStarted) return;
+            
+            // Отрисовка анимированного фона
+            drawAnimatedBackground();
+            
+            // Обновление позиции персонажа
+            shadow.velocity += shadow.gravity;
+            shadow.y += shadow.velocity;
+            
+            // Создание труб
+            if (pipes.length === 0 || pipes[pipes.length - 1].x < canvas.width - pipeSpacing) {
+                createPipe();
+            }
+            
+            pipes.forEach(pipe => {
+                pipe.x -= pipeSpeed;
+                if (!pipe.passed && pipe.x + pipeWidth < shadow.x) {
+                    score++;
+                    pipe.passed = true;
+                }
+                if (checkCollision(pipe) || shadow.y < 0 || shadow.y + shadow.height > canvas.height) {
+                    gameStarted = false;
+                    menu.style.display = 'flex';
+                }
+            });
+            
+            // Отрисовка труб с градиентной заливкой
+            pipes.forEach(pipe => {
+                drawPipe(pipe);
+            });
+            
+            // Отрисовка персонажа с неоновым свечением
+            ctx.save();
+            ctx.shadowColor = "#ff00ff";
+            ctx.shadowBlur = 20;
+            ctx.drawImage(shadowImg, shadow.x, shadow.y, shadow.width, shadow.height);
+            ctx.restore();
+            
+            // Обновление счётчика очков
+            scoreElement.textContent = `Score: ${score}`;
+            
+            requestAnimationFrame(gameLoop);
+        }
+    </script>
+</body>
+</html>
